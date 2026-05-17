@@ -26,25 +26,28 @@ app.all(`${RELAY_PATH}*`, async (req, res) => {
 
     const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
+    const headers = { ...req.headers };
+
+    // هدرهای مهم برای XHTTP
+    delete headers['host'];
+    delete headers['content-length']; // fetch خودش مدیریت می‌کنه
+    headers['Host'] = new URL(TARGET_DOMAIN).host;   // خیلی مهم
+    headers['X-Forwarded-Host'] = headers['Host'];
+    headers['X-Real-IP'] = req.ip;
+
     const response = await fetch(targetUrl, {
       method: req.method,
-      headers: {
-        ...req.headers,
-        host: new URL(TARGET_DOMAIN).host,
-        'Accept-Encoding': 'identity',
-        'Connection': 'keep-alive',
-      },
+      headers: headers,
       body: ['GET', 'HEAD'].includes(req.method) ? null : req.body,
       redirect: 'manual',
       agent: httpsAgent,
       timeout: 45000
     });
 
-    console.log(`Received status: ${response.status}`);
+    console.log(`Received status from Xray: ${response.status}`);
 
     res.status(response.status);
 
-    // کپی هدرها
     response.headers.forEach((value, key) => {
       const k = key.toLowerCase();
       if (!['transfer-encoding', 'content-length', 'connection', 'keep-alive', 'server', 'date'].includes(k)) {
@@ -58,13 +61,12 @@ app.all(`${RELAY_PATH}*`, async (req, res) => {
 
   } catch (error) {
     console.error('Relay Error:', error.message);
-    console.error('Stack:', error.stack);
-    res.status(502).send(`Relay Error: ${error.message}<br>Target: ${targetUrl}`);
+    res.status(502).send(`Relay Error: ${error.message}`);
   }
 });
 
 app.get('/', (req, res) => {
-  res.send(`✅ Relay فعال است<br>Path: ${RELAY_PATH}<br>Target: ${TARGET_DOMAIN}<br>Status: Improved`);
+  res.send(`✅ Relay فعال است<br>Path: ${RELAY_PATH}<br>Target: ${TARGET_DOMAIN}`);
 });
 
 const PORT = process.env.PORT || 3000;
