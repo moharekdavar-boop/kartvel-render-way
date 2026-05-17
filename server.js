@@ -1,5 +1,7 @@
 const express = require('express');
+const https = require('https');
 const fetch = require('node-fetch');
+
 const app = express();
 
 const TARGET_DOMAIN = process.env.TARGET_DOMAIN?.trim();
@@ -8,7 +10,7 @@ const RELAY_PATH = (process.env.RELAY_PATH || '/gunners').trim().replace(/\/$/, 
 app.use(express.raw({ type: '*/*', limit: '100mb' }));
 
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url} | IP: ${req.ip}`);
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
 });
 
@@ -22,6 +24,11 @@ app.all(`${RELAY_PATH}*`, async (req, res) => {
   try {
     console.log(`Forwarding to: ${targetUrl}`);
 
+    // حل مشکل SSL
+    const httpsAgent = new https.Agent({
+      rejectUnauthorized: false
+    });
+
     const response = await fetch(targetUrl, {
       method: req.method,
       headers: {
@@ -29,9 +36,9 @@ app.all(`${RELAY_PATH}*`, async (req, res) => {
         host: new URL(TARGET_DOMAIN).host,
         'Accept-Encoding': 'identity',
       },
-      // مهم‌ترین خط: فقط برای متدهایی که body دارن، body بفرست
       body: ['GET', 'HEAD'].includes(req.method) ? null : req.body,
       redirect: 'manual',
+      agent: httpsAgent
     });
 
     res.status(response.status);
@@ -53,7 +60,7 @@ app.all(`${RELAY_PATH}*`, async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.send(`✅ Relay فعال است<br>Path: ${RELAY_PATH}<br>Target: ${TARGET_DOMAIN}`);
+  res.send(`✅ Relay فعال است<br>Path: ${RELAY_PATH}<br>Target: ${TARGET_DOMAIN}<br>SSL: Ignore Certificate`);
 });
 
 const PORT = process.env.PORT || 3000;
