@@ -4,7 +4,7 @@ const fetch = require('node-fetch');
 
 const app = express();
 
-const TARGET_DOMAIN = process.env.TARGET_DOMAIN?.trim();
+const TARGET_DOMAIN = process.env.TARGET_DOMAIN?.trim().replace(/\/$/, '');
 const RELAY_PATH = (process.env.RELAY_PATH || '/gunners').trim().replace(/\/$/, '') || '/gunners';
 
 app.use(express.raw({ type: '*/*', limit: '100mb' }));
@@ -26,45 +26,45 @@ app.all(`${RELAY_PATH}*`, async (req, res) => {
 
     const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
-    const headers = { ...req.headers };
-
-    // حذف هدرهای مشکل‌ساز
-    delete headers['host'];
-    delete headers['content-length'];
-    delete headers['transfer-encoding'];
-
-    // هدرهای مهم
-    headers['Host'] = new URL(TARGET_DOMAIN).host;
-    headers['X-Forwarded-Host'] = headers['Host'];
-
-    // هدر خاص سنایی (x-host)
-    if (req.headers['x-host']) {
-      headers['x-host'] = req.headers['x-host'];
-    } else {
-      headers['x-host'] = 'kartvel-render-way.onrender.com'; // آدرس Render خودت
+    const headers = new Headers();
+    for (const [key, value] of Object.entries(req.headers)) {
+      const k = key.toLowerCase();
+      if (['host', 'connection', 'keep-alive', 'transfer-encoding', 'content-length'].includes(k)) continue;
+      if (k.startsWith('x-nf-') || k.startsWith('x-netlify-')) continue;
+      headers.set(k, value);
     }
 
-    const response = await fetch(targetUrl, {
+    // هدر Host مهم
+    headers.set('Host', new URL(TARGET_DOMAIN).host);
+
+    const fetchOptions = {
       method: req.method,
-      headers: headers,
-      body: ['GET', 'HEAD'].includes(req.method) ? null : req.body,
+      headers: Object.fromEntries(headers),
       redirect: 'manual',
       agent: httpsAgent,
       timeout: 60000
-    });
+    };
 
-    console.log(`Xray Status: ${response.status}`);
+    if (req.method !== 'GET' && req.method !== 'HEAD') {
+      fetchOptions.body = req.body;
+    }
 
-    res.status(response.status);
+    const upstream = await fetch(targetUrl, fetchOptions);
 
-    response.headers.forEach((value, key) => {
+    console.log(`Xray Status: ${upstream.status}`);
+
+    const responseHeaders = {};
+    for (const [key, value] of upstream.headers) {
       const k = key.toLowerCase();
-      if (!['transfer-encoding', 'content-length', 'connection', 'keep-alive', 'server', 'date'].includes(k)) {
-        res.setHeader(key, value);
+      if (!['transfer-encoding', 'content-length', 'connection', 'keep-alive'].includes(k)) {
+        responseHeaders[key] = value;
       }
-    });
+    }
 
-    const buffer = await response.buffer();
+    res.status(upstream.status);
+    res.set(responseHeaders);
+
+    const buffer = await upstream.buffer();
     console.log(`Response size: ${buffer.length} bytes`);
     res.send(buffer);
 
