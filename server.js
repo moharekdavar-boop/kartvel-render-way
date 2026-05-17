@@ -17,7 +17,7 @@ app.all(`${RELAY_PATH}*`, async (req, res) => {
     return res.status(500).send('TARGET_DOMAIN تنظیم نشده');
   }
 
-  let targetUrl = TARGET_DOMAIN + req.originalUrl;
+  const targetUrl = TARGET_DOMAIN + req.originalUrl;
 
   try {
     console.log(`Forwarding to: ${targetUrl}`);
@@ -27,9 +27,10 @@ app.all(`${RELAY_PATH}*`, async (req, res) => {
       headers: {
         ...req.headers,
         host: new URL(TARGET_DOMAIN).host,
-        'Accept-Encoding': 'identity',   // مهم برای XHTTP
+        'Accept-Encoding': 'identity',
       },
-      body: req.body,
+      // مهم‌ترین خط: فقط برای متدهایی که body دارن، body بفرست
+      body: ['GET', 'HEAD'].includes(req.method) ? null : req.body,
       redirect: 'manual',
     });
 
@@ -47,7 +48,7 @@ app.all(`${RELAY_PATH}*`, async (req, res) => {
 
   } catch (error) {
     console.error('Relay Error:', error.message);
-    res.status(502).send(`Relay Error → ${error.message}<br>Target: ${targetUrl}`);
+    res.status(502).send(`Relay Error: ${error.message}<br>Target: ${targetUrl}`);
   }
 });
 
