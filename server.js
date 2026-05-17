@@ -24,9 +24,7 @@ app.all(`${RELAY_PATH}*`, async (req, res) => {
   try {
     console.log(`Forwarding to: ${targetUrl}`);
 
-    const httpsAgent = new https.Agent({
-      rejectUnauthorized: false
-    });
+    const httpsAgent = new https.Agent({ rejectUnauthorized: false });
 
     const response = await fetch(targetUrl, {
       method: req.method,
@@ -39,11 +37,14 @@ app.all(`${RELAY_PATH}*`, async (req, res) => {
       body: ['GET', 'HEAD'].includes(req.method) ? null : req.body,
       redirect: 'manual',
       agent: httpsAgent,
-      timeout: 30000
+      timeout: 45000
     });
+
+    console.log(`Received status: ${response.status}`);
 
     res.status(response.status);
 
+    // کپی هدرها
     response.headers.forEach((value, key) => {
       const k = key.toLowerCase();
       if (!['transfer-encoding', 'content-length', 'connection', 'keep-alive', 'server', 'date'].includes(k)) {
@@ -52,17 +53,18 @@ app.all(`${RELAY_PATH}*`, async (req, res) => {
     });
 
     const buffer = await response.buffer();
+    console.log(`Response size: ${buffer.length} bytes`);
     res.send(buffer);
 
   } catch (error) {
     console.error('Relay Error:', error.message);
-    console.error('Full Error:', error);
+    console.error('Stack:', error.stack);
     res.status(502).send(`Relay Error: ${error.message}<br>Target: ${targetUrl}`);
   }
 });
 
 app.get('/', (req, res) => {
-  res.send(`✅ Relay فعال است<br>Path: ${RELAY_PATH}<br>Target: ${TARGET_DOMAIN}`);
+  res.send(`✅ Relay فعال است<br>Path: ${RELAY_PATH}<br>Target: ${TARGET_DOMAIN}<br>Status: Improved`);
 });
 
 const PORT = process.env.PORT || 3000;
