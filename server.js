@@ -2,57 +2,60 @@ const express = require('express');
 const fetch = require('node-fetch');
 const app = express();
 
-const TARGET_DOMAIN = process.env.TARGET_DOMAIN; 
-const RELAY_PATH = (process.env.RELAY_PATH || '/api').replace(/\/$/, '') || '/api';
-const RELAY_KEY = process.env.RELAY_KEY; 
+const TARGET_DOMAIN = process.env.TARGET_DOMAIN;
+const RELAY_PATH = (process.env.RELAY_PATH || '/gunners').replace(/\/$/, '') || '/gunners';
 
-app.use(express.raw({ type: '*/*', limit: '50mb' }));
+app.use(express.raw({ type: '*/*', limit: '100mb' }));
 
+// لاگ برای دیباگ
 app.use((req, res, next) => {
-  console.log(`${req.method} ${req.url}`);
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
   next();
 });
 
 app.all(`${RELAY_PATH}*`, async (req, res) => {
   if (!TARGET_DOMAIN) {
-    return res.status(500).send('TARGET_DOMAIN تنظیم نشده است');
+    return res.status(500).send('TARGET_DOMAIN not set');
   }
 
-  if (RELAY_KEY && req.headers['x-relay-key'] !== RELAY_KEY) {
-    return res.status(403).send('Forbidden');
-  }
-
-  const upstreamPath = req.originalUrl;
-  const targetUrl = TARGET_DOMAIN + upstreamPath.replace(RELAY_PATH, '');
+  const targetUrl = TARGET_DOMAIN + req.originalUrl;
 
   try {
     const response = await fetch(targetUrl, {
       method: req.method,
-      headers: { ...req.headers, host: new URL(TARGET_DOMAIN).host },
+      headers: {
+        ...req.headers,
+        host: new URL(TARGET_DOMAIN).host,
+        'X-Forwarded-For': req.ip,
+      },
       body: ['GET', 'HEAD'].includes(req.method) ? null : req.body,
       redirect: 'manual',
     });
 
     res.status(response.status);
+
+    // فوروارد همه هدرها به جز بعضی موارد
     response.headers.forEach((value, key) => {
-      if (!['transfer-encoding', 'content-length', 'connection'].includes(key.toLowerCase())) {
+      const lowerKey = key.toLowerCase();
+      if (!['transfer-encoding', 'content-length', 'connection', 'keep-alive'].includes(lowerKey)) {
         res.setHeader(key, value);
       }
     });
 
     const buffer = await response.buffer();
     res.send(buffer);
+
   } catch (error) {
-    console.error(error);
-    res.status(502).send('Bad Gateway');
+    console.error('Relay Error:', error.message);
+    res.status(502).send('Bad Gateway - Relay Error');
   }
 });
 
 app.get('/', (req, res) => {
-  res.send(`XHTTP Relay فعال است! 🚀<br>Path: ${RELAY_PATH}<br>Target: ${TARGET_DOMAIN || 'تنظیم نشده'}`);
+  res.send(`XHTTP Relay فعاله<br>Path: ${RELAY_PATH}<br>Target: ${TARGET_DOMAIN}`);
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Relay روی پورت ${PORT} فعال شد`);
+  console.log(`Relay listening on ${PORT}`);
 });
