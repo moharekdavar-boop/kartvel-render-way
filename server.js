@@ -24,7 +24,6 @@ app.all(`${RELAY_PATH}*`, async (req, res) => {
   try {
     console.log(`Forwarding to: ${targetUrl}`);
 
-    // حل مشکل SSL
     const httpsAgent = new https.Agent({
       rejectUnauthorized: false
     });
@@ -35,17 +34,19 @@ app.all(`${RELAY_PATH}*`, async (req, res) => {
         ...req.headers,
         host: new URL(TARGET_DOMAIN).host,
         'Accept-Encoding': 'identity',
+        'Connection': 'keep-alive',
       },
       body: ['GET', 'HEAD'].includes(req.method) ? null : req.body,
       redirect: 'manual',
-      agent: httpsAgent
+      agent: httpsAgent,
+      timeout: 30000
     });
 
     res.status(response.status);
 
     response.headers.forEach((value, key) => {
       const k = key.toLowerCase();
-      if (!['transfer-encoding', 'content-length', 'connection', 'keep-alive', 'server'].includes(k)) {
+      if (!['transfer-encoding', 'content-length', 'connection', 'keep-alive', 'server', 'date'].includes(k)) {
         res.setHeader(key, value);
       }
     });
@@ -55,13 +56,16 @@ app.all(`${RELAY_PATH}*`, async (req, res) => {
 
   } catch (error) {
     console.error('Relay Error:', error.message);
+    console.error('Full Error:', error);
     res.status(502).send(`Relay Error: ${error.message}<br>Target: ${targetUrl}`);
   }
 });
 
 app.get('/', (req, res) => {
-  res.send(`✅ Relay فعال است<br>Path: ${RELAY_PATH}<br>Target: ${TARGET_DOMAIN}<br>SSL: Ignore Certificate`);
+  res.send(`✅ Relay فعال است<br>Path: ${RELAY_PATH}<br>Target: ${TARGET_DOMAIN}`);
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`Relay started on ${PORT}`));
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Relay started on port ${PORT}`);
+});
