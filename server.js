@@ -28,12 +28,21 @@ app.all(`${RELAY_PATH}*`, async (req, res) => {
 
     const headers = { ...req.headers };
 
-    // هدرهای مهم برای XHTTP
+    // حذف هدرهای مشکل‌ساز
     delete headers['host'];
-    delete headers['content-length']; // fetch خودش مدیریت می‌کنه
-    headers['Host'] = new URL(TARGET_DOMAIN).host;   // خیلی مهم
+    delete headers['content-length'];
+    delete headers['transfer-encoding'];
+
+    // هدرهای مهم
+    headers['Host'] = new URL(TARGET_DOMAIN).host;
     headers['X-Forwarded-Host'] = headers['Host'];
-    headers['X-Real-IP'] = req.ip;
+
+    // هدر خاص سنایی (x-host)
+    if (req.headers['x-host']) {
+      headers['x-host'] = req.headers['x-host'];
+    } else {
+      headers['x-host'] = 'kartvel-render-way.onrender.com'; // آدرس Render خودت
+    }
 
     const response = await fetch(targetUrl, {
       method: req.method,
@@ -41,10 +50,10 @@ app.all(`${RELAY_PATH}*`, async (req, res) => {
       body: ['GET', 'HEAD'].includes(req.method) ? null : req.body,
       redirect: 'manual',
       agent: httpsAgent,
-      timeout: 45000
+      timeout: 60000
     });
 
-    console.log(`Received status from Xray: ${response.status}`);
+    console.log(`Xray Status: ${response.status}`);
 
     res.status(response.status);
 
